@@ -1,5 +1,5 @@
 import os
-
+import time
 # Wallet address to search for
 wallet_address_to_find = "13zb1hQbWVsc2S7ZTZnP2G4undNNpdh5so"
 
@@ -34,4 +34,7 @@ def check_files_and_clean_up(directory, address):
             print(f"Removed file: {filename}")
 
 # Run the function
-check_files_and_clean_up(input_dir, wallet_address_to_find)
+if __name__ == '__main__':
+    while True:
+        check_files_and_clean_up(input_dir, wallet_address_to_find)
+        time.sleep(5)

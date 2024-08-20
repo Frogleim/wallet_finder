@@ -1,64 +1,51 @@
-from ecdsa import SigningKey, SECP256k1
-import tronpy
-from tronpy.keys import PrivateKey
-import time
-import binascii
-import os
+import ecdsa
+import hashlib
+import base58
+
+# Define the range for private keys
+start_range = int('0000000000000000000000000000000000000000000000000000000000200000', 16)
+end_range = int('00000000000000000000000000000000000000000000000000000000003fffff', 16)
 
 
-def generate_random_private_key():
-    random_bytes = os.urandom(32)
-    
-    # Convert the bytes to a hexadecimal string
-    hex_string = binascii.hexlify(random_bytes).decode('utf-8')
-    
-    return hex_string
+def private_key_to_public_key(private_key):
+    """ Convert the private key to a public key. """
+    sk = ecdsa.SigningKey.from_string(bytes.fromhex(f'{private_key:064x}'), curve=ecdsa.SECP256k1)
+    vk = sk.verifying_key
+    return b'\x04' + vk.to_string()
 
-def generate_tron_wallet():
-    sk = SigningKey.generate(curve=SECP256k1)
-    #private_key_hex = sk.to_string().hex()
-    private_key_hex = generate_random_private_key()
-    private_key = PrivateKey(bytes.fromhex(private_key_hex))
-    address = private_key.public_key.to_base58check_address()
-    return private_key, address
 
-def check_trx_balance(client, address):
-    try:
-        balance = client.get_account_balance(address)
-        return balance
-    except Exception as e:
-        print(f"Error checking TRX balance for {address}: {e}")
-        return None
+def public_key_to_address(public_key):
+    """ Convert the public key to a Toncoin address. """
+    # Use SHA-256 and then RIPEMD-160 for hashing the public key
+    sha256 = hashlib.sha256(public_key).digest()
+    ripemd160 = hashlib.new('ripemd160')
+    ripemd160.update(sha256)
+    hashed_public_key = ripemd160.digest()
 
-def check_usdt_balance(client, address):
-    try:
-        usdt_contract_address = 'TXLAQ63Xg1NAzckPwKHvzw7CSEmLMEqcdj'  # USDT TRC-20 contract address on Tron
-        contract = client.get_contract(usdt_contract_address)
-        balance = contract.functions.balanceOf(address)
-        return balance
-    except Exception as e:
-        print(f"Error checking USDT balance for {address}: {e}")
-        return None
+    # Toncoin specific prefix, you may need to adjust this depending on Toncoin's address format
+    extended_key = b'\x00' + hashed_public_key
 
-def main():
-    client = tronpy.Tron()
-    
-    while True:
-        private_key, address = generate_tron_wallet()
-        private_key_hex = private_key.hex()
+    # Calculate the checksum
+    first_sha256 = hashlib.sha256(extended_key).digest()
+    second_sha256 = hashlib.sha256(first_sha256).digest()
+    checksum = second_sha256[:4]
 
-        trx_balance = check_trx_balance(client, address)
-        usdt_balance = check_usdt_balance(client, address)
+    # Encode the address using Base58
+    address = base58.b58encode(extended_key + checksum)
+    return address
 
-        output = (f"Private Key: {private_key_hex}, Address: {address}, "
-                  f"TRX Balance: {trx_balance}, USDT Balance: {usdt_balance}\n")
-        print(output)
 
-        with open('generated_tron_wallets.txt', 'a') as file:
-            file.write(output)
-        
-        # Add delay to avoid rate limiting
-        time.sleep(2)
+def find_toncoin_wallet():
+    """ Find a Toncoin wallet within the specified range. """
+    for private_key in range(start_range, end_range + 1):
+        public_key = private_key_to_public_key(private_key)
+        address = public_key_to_address(public_key)
+        print(f"Private Key: {private_key:064x} -> Address: {address.decode()}")
+        if address.decode() == '1CfZWK1QTQE3eS9qn61dQjV89KDjZzfNcv':
+            print('Found')
+            break
+        # Here you can add any specific condition to check for a valid Toncoin address
+
 
 if __name__ == "__main__":
-    main()
+    find_toncoin_wallet()
